@@ -87,7 +87,7 @@ export class ForcedFailError extends Error {
 export async function callOpenAI(
   unified: UnifiedRequest,
   model: string,
-  requestId = randomUUID()
+  requestId: string = randomUUID()
 ): Promise<UnifiedResponse> {
   if (process.env.FORCE_FAIL_PROVIDER === "openai") {
     throw new ForcedFailError();

@@ -37,7 +37,7 @@ function mapStopReason(reason: string | null | undefined): StopReason {
 export function toProviderFormat(
   unified: UnifiedRequest,
   model: string
-): Groq.Chat.ChatCompletionCreateParamsNonStreaming {
+) {
   return {
     model,
     max_tokens: unified.max_tokens,
@@ -87,7 +87,7 @@ export class ForcedFailError extends Error {
 export async function callGroq(
   unified: UnifiedRequest,
   model: string,
-  requestId = randomUUID()
+  requestId: string = randomUUID()
 ): Promise<UnifiedResponse> {
   if (process.env.FORCE_FAIL_PROVIDER === "groq") {
     throw new ForcedFailError();
@@ -95,7 +95,7 @@ export async function callGroq(
 
   const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
   const start = Date.now();
-  const raw = await client.chat.completions.create(toProviderFormat(unified, model));
+  const raw = await client.chat.completions.create(toProviderFormat(unified, model)) as Groq.Chat.ChatCompletion;
   const latency_ms = Date.now() - start;
 
   return fromProviderFormat(raw, requestId, latency_ms, false);

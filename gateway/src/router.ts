@@ -42,7 +42,7 @@ function isRetryable(err: unknown): boolean {
 export async function route(
   unified: UnifiedRequest,
   deps: RouterDeps,
-  requestId = randomUUID()
+  requestId: string = randomUUID()
 ): Promise<UnifiedResponse> {
   const chain = MODEL_TIERS[unified.tier];
   const callers = { ...DEFAULT_CALLERS, ...deps.callers };

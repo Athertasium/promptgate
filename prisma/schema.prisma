@@ -11,3 +11,65 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+model Request {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  created_at         DateTime         @default(now()) @db.Timestamptz
+  tier               String
+  served_by_provider String?
+  served_by_model    String?
+  input_tokens       Int?
+  output_tokens      Int?
+  cost_usd           Decimal?         @db.Decimal(10, 6)
+  latency_ms         Int?
+  cache_hit          Boolean          @default(false)
+  failover_occurred  Boolean          @default(false)
+  caller_id          String?
+  tags               String[]
+
+  failover_events    FailoverEvent[]
+  guardrail_events   GuardrailEvent[]
+  semantic_cache_log SemanticCacheLog[]
+
+  @@map("requests")
+}
+
+model FailoverEvent {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id       String?  @db.Uuid
+  created_at       DateTime @default(now()) @db.Timestamptz
+  from_provider    String
+  to_provider      String
+  reason           String
+  added_latency_ms Int?
+
+  request          Request? @relation(fields: [request_id], references: [id])
+
+  @@map("failover_events")
+}
+
+model GuardrailEvent {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id String?  @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz
+  check_type String
+  action     String
+  detail     Json?
+
+  request    Request? @relation(fields: [request_id], references: [id])
+
+  @@map("guardrail_events")
+}
+
+model SemanticCacheLog {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id        String?  @db.Uuid
+  created_at        DateTime @default(now()) @db.Timestamptz
+  similarity_score  Float
+  would_have_hit    Boolean
+  matched_cache_key String?
+
+  request           Request? @relation(fields: [request_id], references: [id])
+
+  @@map("semantic_cache_log")
+}

@@ -104,7 +104,7 @@ export class ForcedFailError extends Error {
 export async function callAnthropic(
   unified: UnifiedRequest,
   model: string,
-  requestId = randomUUID()
+  requestId: string = randomUUID()
 ): Promise<UnifiedResponse> {
   if (process.env.FORCE_FAIL_PROVIDER === "anthropic") {
     throw new ForcedFailError();
