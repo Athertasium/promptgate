@@ -1,0 +1,85 @@
+{
+  "_comment": "Captured from Anthropic API 2025-06. Includes cache_read_input_tokens to exercise the 3-field token accounting path.",
+  "standard": {
+    "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-sonnet-4-6",
+    "content": [
+      {
+        "type": "text",
+        "text": "The capital of France is Paris."
+      }
+    ],
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 14,
+      "output_tokens": 9,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0
+    }
+  },
+  "with_cache_tokens": {
+    "id": "msg_02ABCDEFGHIJKLMNptvVoYEL",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-sonnet-4-6",
+    "content": [
+      {
+        "type": "text",
+        "text": "Based on the provided context, the answer is 42."
+      }
+    ],
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 5,
+      "output_tokens": 12,
+      "cache_read_input_tokens": 1200,
+      "cache_creation_input_tokens": 0
+    }
+  },
+  "max_tokens": {
+    "id": "msg_03XYZABCDEFGHIJKptvVoYEL",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-sonnet-4-6",
+    "content": [
+      {
+        "type": "text",
+        "text": "This is a truncated respon"
+      }
+    ],
+    "stop_reason": "max_tokens",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 14,
+      "output_tokens": 10,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0
+    }
+  },
+  "tool_use": {
+    "id": "msg_04TOOLUSEABCDEFGptvVoYEL",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-sonnet-4-6",
+    "content": [
+      {
+        "type": "tool_use",
+        "id": "toolu_01A09q90qw90lq917835lq9",
+        "name": "get_weather",
+        "input": { "location": "Paris, France" }
+      }
+    ],
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 22,
+      "output_tokens": 20,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0
+    }
+  }
+}
