@@ -1,6 +1,6 @@
-export type Tier = "fast" | "balanced" | "smart";
+export type Tier = "fast" | "balanced" | "smart" | "thinking";
 
-export type Provider = "openai" | "anthropic" | "groq";
+export type Provider = "openai" | "anthropic" | "groq" | "nvidia";
 
 export type MessageRole = "system" | "user" | "assistant";
 

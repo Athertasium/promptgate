@@ -1,3 +1,4 @@
+import "dotenv/config";
 import Fastify from "fastify";
 import Redis from "ioredis";
 import { CircuitBreaker } from "./circuit-breaker.js";
