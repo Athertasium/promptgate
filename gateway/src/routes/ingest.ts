@@ -27,7 +27,7 @@ const messageSchema = z.object({
 });
 
 const bodySchema = z.object({
-  tier: z.enum(["fast", "balanced", "smart"]),
+  tier: z.enum(["fast", "balanced", "smart", "thinking"]),
   messages: z.array(messageSchema).min(1),
   max_tokens: z.number().int().positive(),
   temperature: z.number().min(0).max(2).optional(),

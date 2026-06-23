@@ -1,4 +1,4 @@
-import Groq from "groq-sdk";
+import OpenAI from "openai";
 import type {
   UnifiedRequest,
   UnifiedResponse,
@@ -8,11 +8,15 @@ import { randomUUID } from "crypto";
 
 // Pricing per 1M tokens (USD) — as of 2025-06
 const PRICING: Record<string, { input: number; output: number }> = {
-  "llama-3.3-70b-versatile": { input: 0.59,  output: 0.79  },
-  "llama-3.1-8b-instant":    { input: 0.05,  output: 0.08  },
-  "openai/gpt-oss-20b":      { input: 0.075, output: 0.30  },
-  "openai/gpt-oss-120b":     { input: 0.15,  output: 0.60  },
+  "deepseek-ai/deepseek-v4-flash":       { input: 0.09,  output: 0.18  },
+  "deepseek-ai/deepseek-pro":            { input: 0.44,  output: 0.87  },
+  "nvidia/nemotron-3-ultra-550b-a55b":   { input: 0.5,   output: 2.20  },
 };
+
+// Models that require thinking/reasoning budget params
+const THINKING_MODELS = new Set([
+  "nvidia/nemotron-3-ultra-550b-a55b",
+]);
 
 function computeCost(
   model: string,
@@ -24,8 +28,7 @@ function computeCost(
          (outputTokens / 1_000_000) * price.output;
 }
 
-// Groq is OpenAI-API-compatible — finish_reason strings are identical to OpenAI.
-// This is a 2-way mapping problem (OpenAI/Groq vs Anthropic), not 3-way.
+// NVIDIA API is OpenAI-compatible — finish_reason strings are identical to OpenAI.
 function mapStopReason(reason: string | null | undefined): StopReason {
   switch (reason) {
     case "stop":           return "end_turn";
@@ -36,10 +39,9 @@ function mapStopReason(reason: string | null | undefined): StopReason {
   }
 }
 
-export function toProviderFormat(
-  unified: UnifiedRequest,
-  model: string
-) {
+export function toProviderFormat(unified: UnifiedRequest, model: string) {
+  const isThinking = THINKING_MODELS.has(model);
+
   return {
     model,
     max_tokens: unified.max_tokens,
@@ -48,18 +50,33 @@ export function toProviderFormat(
       role: m.role,
       content: m.content,
     })),
-    stream: false,
+    stream: false as const,
+    // ponytail: extra params passed through; NVIDIA ignores unknowns for non-thinking models
+    ...(isThinking && {
+      reasoning_budget: unified.max_tokens,
+      chat_template_kwargs: { enable_thinking: true },
+    }),
   };
 }
 
 export function fromProviderFormat(
-  raw: Groq.Chat.ChatCompletion,
+  raw: OpenAI.Chat.ChatCompletion,
   requestId: string,
   latency_ms: number,
   failover_occurred: boolean
 ): UnifiedResponse {
   const choice = raw.choices[0];
-  const content = choice?.message?.content ?? "";
+  const message = choice?.message as OpenAI.Chat.ChatCompletionMessage & {
+    reasoning_content?: string;
+  };
+
+  // For thinking models, reasoning_content arrives separately — append it
+  // so callers see the full chain-of-thought + answer in content.
+  const reasoning = message?.reasoning_content
+    ? `<thinking>\n${message.reasoning_content}\n</thinking>\n\n`
+    : "";
+  const content = reasoning + (message?.content ?? "");
+
   const inputTokens = raw.usage?.prompt_tokens ?? 0;
   const outputTokens = raw.usage?.completion_tokens ?? 0;
 
@@ -71,7 +88,7 @@ export function fromProviderFormat(
       output_tokens: outputTokens,
       cost_usd: computeCost(raw.model, inputTokens, outputTokens),
     },
-    served_by: { provider: "groq", model: raw.model },
+    served_by: { provider: "nvidia", model: raw.model },
     failover_occurred,
     cache_hit: false,
     latency_ms,
@@ -81,23 +98,32 @@ export function fromProviderFormat(
 
 export class ForcedFailError extends Error {
   constructor() {
-    super("FORCE_FAIL: groq adapter forced failure");
+    super("FORCE_FAIL: nvidia adapter forced failure");
     this.name = "ForcedFailError";
   }
 }
 
-export async function callGroq(
+function makeClient(): OpenAI {
+  return new OpenAI({
+    apiKey: process.env.NVIDIA_API_KEY,
+    baseURL: "https://integrate.api.nvidia.com/v1",
+  });
+}
+
+export async function callNvidia(
   unified: UnifiedRequest,
   model: string,
   requestId: string = randomUUID()
 ): Promise<UnifiedResponse> {
-  if (process.env.FORCE_FAIL_PROVIDER === "groq") {
+  if (process.env.FORCE_FAIL_PROVIDER === "nvidia") {
     throw new ForcedFailError();
   }
 
-  const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  const client = makeClient();
   const start = Date.now();
-  const raw = await client.chat.completions.create(toProviderFormat(unified, model)) as Groq.Chat.ChatCompletion;
+  const raw = await client.chat.completions.create(
+    toProviderFormat(unified, model)
+  ) as OpenAI.Chat.ChatCompletion;
   const latency_ms = Date.now() - start;
 
   return fromProviderFormat(raw, requestId, latency_ms, false);

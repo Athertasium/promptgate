@@ -5,6 +5,7 @@ import { CircuitBreaker } from "./circuit-breaker";
 import { callAnthropic } from "./providers/anthropic";
 import { callOpenAI } from "./providers/openai";
 import { callGroq } from "./providers/groq";
+import { callNvidia } from "./providers/nvidia";
 
 export type ProviderCaller = (
   unified: UnifiedRequest,
@@ -29,6 +30,7 @@ const DEFAULT_CALLERS: Record<Provider, ProviderCaller> = {
   anthropic: callAnthropic,
   openai: callOpenAI,
   groq: callGroq,
+  nvidia: callNvidia,
 };
 
 function isRetryable(err: unknown): boolean {
