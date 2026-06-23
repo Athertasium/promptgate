@@ -1,0 +1,88 @@
+{
+  "_comment": "Captured from Groq API 2025-06. OpenAI-compatible format — finish_reason strings identical to OpenAI.",
+  "standard": {
+    "id": "chatcmpl-groq-A1B2C3D4E5F6G7H8I9J0",
+    "object": "chat.completion",
+    "created": 1750000100,
+    "model": "llama-3.3-70b-versatile",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "The capital of France is Paris."
+        },
+        "finish_reason": "stop",
+        "logprobs": null
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 14,
+      "completion_tokens": 9,
+      "total_tokens": 23,
+      "prompt_time": 0.002,
+      "completion_time": 0.018,
+      "total_time": 0.02
+    }
+  },
+  "max_tokens": {
+    "id": "chatcmpl-groq-B2C3D4E5F6G7H8I9J0K1",
+    "object": "chat.completion",
+    "created": 1750000101,
+    "model": "llama-3.3-70b-versatile",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "This is a truncated respon"
+        },
+        "finish_reason": "length",
+        "logprobs": null
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 14,
+      "completion_tokens": 10,
+      "total_tokens": 24,
+      "prompt_time": 0.002,
+      "completion_time": 0.02,
+      "total_time": 0.022
+    }
+  },
+  "tool_calls": {
+    "id": "chatcmpl-groq-C3D4E5F6G7H8I9J0K1L2",
+    "object": "chat.completion",
+    "created": 1750000102,
+    "model": "llama-3.3-70b-versatile",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "call_groq_abc123",
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "arguments": "{\"location\": \"Paris, France\"}"
+              }
+            }
+          ]
+        },
+        "finish_reason": "tool_calls",
+        "logprobs": null
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 22,
+      "completion_tokens": 20,
+      "total_tokens": 42,
+      "prompt_time": 0.003,
+      "completion_time": 0.04,
+      "total_time": 0.043
+    }
+  }
+}
