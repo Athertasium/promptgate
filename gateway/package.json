@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "start": "node dist/server.js",
-    "build": "prisma generate --schema=../prisma/schema.prisma && tsc",
+    "start": "bun src/server.ts",
+    "build": "prisma generate --schema=../prisma/schema.prisma",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
