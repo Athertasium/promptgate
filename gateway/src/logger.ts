@@ -27,6 +27,7 @@ export async function logFailoverEvent(
   fromProvider: string,
   toProvider: string,
   reason: string,
+  hopNumber?: number,
   addedLatencyMs?: number
 ): Promise<void> {
   await getDb().failoverEvent.create({
@@ -35,6 +36,7 @@ export async function logFailoverEvent(
       from_provider: fromProvider,
       to_provider: toProvider,
       reason,
+      hop_number: hopNumber ?? null,
       added_latency_ms: addedLatencyMs ?? null,
     },
   });

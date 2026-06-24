@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 import type { Redis } from "ioredis";
-import { MODEL_TIERS } from "@promptgate/shared";
 import type { UnifiedRequest } from "@promptgate/shared";
 import type { CircuitBreaker } from "../circuit-breaker.js";
 import type { ExactMatchCache } from "../cache.js";
@@ -133,10 +132,14 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
     }
 
     // Non-streaming path — route to provider
-    const start = Date.now();
+    const failoverEvents: import("../router.js").FailoverRecord[] = [];
     let response;
     try {
-      response = await route(processedReq, { breaker: deps.breaker }, requestId);
+      response = await route(
+        processedReq,
+        { breaker: deps.breaker, failoverEvents },
+        requestId
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : "All providers failed";
       return reply.status(502).send({ error: msg });
@@ -157,17 +160,10 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
     const allGuardrailMatches = [...guardrailResult.matches, ...outputGuardrail.matches];
     const childLogTasks: Promise<unknown>[] = [
       logGuardrailEvents(requestId, allGuardrailMatches),
+      ...failoverEvents.map((ev) =>
+        logFailoverEvent(requestId, ev.fromProvider, ev.toProvider, ev.reason, ev.hopNumber)
+      ),
     ];
-
-    if (response.failover_occurred) {
-      // Infer from_provider: first provider in tier chain that isn't served_by
-      const chain = MODEL_TIERS[processedReq.tier];
-      const fromProvider = chain[0].provider;
-      const toProvider = response.served_by.provider;
-      if (fromProvider !== toProvider) {
-        childLogTasks.push(logFailoverEvent(requestId, fromProvider, toProvider, "error"));
-      }
-    }
 
     if (deps.semanticCacheLog) {
       const cacheKey = `${processedReq.tier}:${requestId}`;

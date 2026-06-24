@@ -41,6 +41,7 @@ model FailoverEvent {
   from_provider    String
   to_provider      String
   reason           String
+  hop_number       Int?
   added_latency_ms Int?
 
   request          Request? @relation(fields: [request_id], references: [id])
