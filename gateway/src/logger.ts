@@ -3,7 +3,11 @@ import type { GuardrailMatch } from "./guardrails/index.js";
 import type { SemanticObservation } from "./semantic-cache.js";
 import { getDb } from "./db.js";
 
-export async function logRequest(req: UnifiedRequest, res: UnifiedResponse): Promise<void> {
+export async function logRequest(
+  req: UnifiedRequest,
+  res: UnifiedResponse,
+  extras?: { ttft_ms?: number; cache_type?: string }
+): Promise<void> {
   await getDb().request.create({
     data: {
       id: res.request_id,
@@ -15,9 +19,11 @@ export async function logRequest(req: UnifiedRequest, res: UnifiedResponse): Pro
       cost_usd: res.usage.cost_usd,
       latency_ms: res.latency_ms,
       cache_hit: res.cache_hit,
+      cache_type: extras?.cache_type ?? null,
       failover_occurred: res.failover_occurred,
       caller_id: req.metadata?.caller_id ?? null,
       tags: req.metadata?.tags ?? [],
+      ttft_ms: extras?.ttft_ms ?? null,
     },
   });
 }

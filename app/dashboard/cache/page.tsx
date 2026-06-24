@@ -18,10 +18,14 @@ ChartJS.register(ScatterController, PointElement, LinearScale, Tooltip, Legend);
 
 type CacheData = {
   exactHitRate: number;
+  semanticHitRate: number;
+  totalHitRate: number;
   exactHits: number;
+  semanticHits: number;
   totalRequests: number;
   savedCost: number;
   threshold: number;
+  cacheTypeBreakdown: { type: string; count: number }[];
   semanticPoints: { score: number; wouldHit: boolean; at: string }[];
 };
 
@@ -86,10 +90,10 @@ export default function CachePage() {
       <h1 className="text-xl font-semibold">Cache Analysis</h1>
 
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Exact hit rate" value={`${(data.exactHitRate * 100).toFixed(1)}%`} accent="green" />
-        <StatCard label="Exact hits" value={String(data.exactHits)} />
-        <StatCard label="Total requests" value={String(data.totalRequests)} />
-        <StatCard label="Cost saved" value={`$${data.savedCost.toFixed(4)}`} accent="indigo" sub="exact match" />
+        <StatCard label="Total hit rate" value={`${(data.totalHitRate * 100).toFixed(1)}%`} accent="green" />
+        <StatCard label="Exact hits" value={String(data.exactHits)} sub={`${(data.exactHitRate * 100).toFixed(1)}%`} />
+        <StatCard label="Semantic hits" value={String(data.semanticHits)} sub={`${(data.semanticHitRate * 100).toFixed(1)}%`} accent={data.semanticHits > 0 ? "indigo" : undefined} />
+        <StatCard label="Cost saved" value={`$${data.savedCost.toFixed(4)}`} accent="indigo" />
       </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">

@@ -6,11 +6,18 @@ export async function GET() {
 
   const THRESHOLD = 0.92;
 
-  const [exactStats, semanticPoints] = await Promise.all([
+  const [allStats, cacheBreakdown, semanticPoints] = await Promise.all([
     db.request.aggregate({
       _count: { id: true },
       _sum: { cost_usd: true },
     }),
+    db.$queryRaw<{ cache_type: string; count: number }[]>`
+      SELECT
+        COALESCE(cache_type, 'live') AS cache_type,
+        COUNT(*)::int AS count
+      FROM requests
+      GROUP BY 1
+    `,
     db.semanticCacheLog.findMany({
       orderBy: { created_at: "desc" },
       take: 500,
@@ -22,22 +29,25 @@ export async function GET() {
     }),
   ]);
 
-  const [cacheHits] = await Promise.all([
-    db.request.aggregate({
-      _count: { id: true },
-      where: { cache_hit: true },
-    }),
-  ]);
-
-  const total = exactStats._count.id;
-  const hits = cacheHits._count.id;
+  const total = allStats._count.id ?? 0;
+  const byType = Object.fromEntries(cacheBreakdown.map((r) => [r.cache_type, Number(r.count)]));
+  const exactHits = byType["exact"] ?? 0;
+  const semanticHitsCount = byType["semantic"] ?? 0;
+  const totalHits = exactHits + semanticHitsCount;
 
   return NextResponse.json({
-    exactHitRate: total > 0 ? hits / total : 0,
-    exactHits: hits,
+    exactHitRate: total > 0 ? exactHits / total : 0,
+    semanticHitRate: total > 0 ? semanticHitsCount / total : 0,
+    totalHitRate: total > 0 ? totalHits / total : 0,
+    exactHits,
+    semanticHits: semanticHitsCount,
     totalRequests: total,
-    savedCost: Number(exactStats._sum.cost_usd ?? 0),
+    savedCost: Number(allStats._sum.cost_usd ?? 0),
     threshold: THRESHOLD,
+    cacheTypeBreakdown: cacheBreakdown.map((r) => ({
+      type: r.cache_type,
+      count: Number(r.count),
+    })),
     semanticPoints: semanticPoints.map((p) => ({
       score: p.similarity_score,
       wouldHit: p.would_have_hit,

@@ -10,6 +10,8 @@ const LINKS = [
   { href: "/dashboard/guardrails", label: "Guardrails" },
   { href: "/dashboard/cache", label: "Cache" },
   { href: "/dashboard/tiers", label: "Model Tiers" },
+  { href: "/dashboard/streaming", label: "Streaming" },
+  { href: "/dashboard/auth-usage", label: "Auth & Usage" },
 ];
 
 export function Nav() {

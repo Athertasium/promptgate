@@ -23,9 +23,11 @@ model Request {
   cost_usd           Decimal?         @db.Decimal(10, 6)
   latency_ms         Int?
   cache_hit          Boolean          @default(false)
+  cache_type         String?
   failover_occurred  Boolean          @default(false)
   caller_id          String?
   tags               String[]
+  ttft_ms            Int?
 
   failover_events    FailoverEvent[]
   guardrail_events   GuardrailEvent[]

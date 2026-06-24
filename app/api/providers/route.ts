@@ -4,7 +4,7 @@ import { getDb } from "../../../lib/db";
 export async function GET() {
   const db = getDb();
 
-  const [providerStats, recentFailovers] = await Promise.all([
+  const [providerStats, recentFailovers, hopDistribution] = await Promise.all([
     db.$queryRaw<
       { provider: string; total: number; failovers: number; last_failure: Date | null }[]
     >`
@@ -21,10 +21,27 @@ export async function GET() {
       orderBy: { created_at: "desc" },
       take: 50,
     }),
+    db.$queryRaw<{ hops: number; count: number }[]>`
+      SELECT
+        COALESCE(max_hop, 0) AS hops,
+        COUNT(*)::int AS count
+      FROM (
+        SELECT r.id, MAX(fe.hop_number) AS max_hop
+        FROM requests r
+        LEFT JOIN failover_events fe ON fe.request_id = r.id
+        GROUP BY r.id
+      ) t
+      GROUP BY 1
+      ORDER BY 1
+    `,
   ]);
 
   return NextResponse.json({
     providers: providerStats,
     recentFailovers,
+    hopDistribution: hopDistribution.map((r) => ({
+      hops: Number(r.hops),
+      count: Number(r.count),
+    })),
   });
 }

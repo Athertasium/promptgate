@@ -82,8 +82,7 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
     const cached = await deps.cache.get(processedReq);
     if (cached) {
       const cacheRes = { ...cached, request_id: requestId };
-      // logRequest must complete before logGuardrailEvents (FK dependency)
-      await logRequest(processedReq, cacheRes);
+      await logRequest(processedReq, cacheRes, { cache_type: "exact" });
       await logGuardrailEvents(requestId, guardrailResult.matches);
       return reply.send(cacheRes);
     }
@@ -98,10 +97,15 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
 
       try {
         let doneEvent: StreamDone | null = null;
+        const streamStartMs = Date.now();
+        let ttftMs: number | null = null;
         const gen = routeStream(processedReq, { breaker: deps.breaker }, requestId);
 
         for await (const event of gen) {
           reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+          if (event.type === "delta" && ttftMs === null) {
+            ttftMs = Date.now() - streamStartMs;
+          }
           if (event.type === "done") doneEvent = event;
         }
 
@@ -118,7 +122,7 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
             latency_ms: doneEvent.latency_ms,
             request_id: requestId,
           };
-          await logRequest(processedReq, streamedResponse);
+          await logRequest(processedReq, streamedResponse, { ttft_ms: ttftMs ?? undefined });
           await logGuardrailEvents(requestId, guardrailResult.matches);
         }
       } catch (err) {

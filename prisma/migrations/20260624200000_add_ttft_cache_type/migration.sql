@@ -1,0 +1,2 @@
+ALTER TABLE "requests" ADD COLUMN IF NOT EXISTS "ttft_ms" INTEGER;
+ALTER TABLE "requests" ADD COLUMN IF NOT EXISTS "cache_type" TEXT;

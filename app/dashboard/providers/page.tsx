@@ -1,8 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  Chart as ChartJS,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import { Bar } from "react-chartjs-2";
 import { StatCard } from "../_components/stat-card";
 import { Empty } from "../_components/empty";
+
+ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
 type Provider = {
   provider: string;
@@ -20,7 +31,11 @@ type FailoverEvent = {
   added_latency_ms: number | null;
 };
 
-type Data = { providers: Provider[]; recentFailovers: FailoverEvent[] };
+type Data = {
+  providers: Provider[];
+  recentFailovers: FailoverEvent[];
+  hopDistribution: { hops: number; count: number }[];
+};
 
 const REASON_BADGE: Record<string, string> = {
   circuit_open: "bg-rose-900/60 text-rose-300",
@@ -89,6 +104,43 @@ export default function ProvidersPage() {
           </tbody>
         </table>
       </div>
+
+      {data.hopDistribution.length > 0 && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <p className="mb-4 text-sm font-medium text-zinc-400">Failover depth distribution</p>
+          <Bar
+            data={{
+              labels: data.hopDistribution.map((r) =>
+                r.hops === 0 ? "0 hops (direct)" : `${r.hops} hop${r.hops > 1 ? "s" : ""}`
+              ),
+              datasets: [
+                {
+                  label: "Requests",
+                  data: data.hopDistribution.map((r) => r.count),
+                  backgroundColor: data.hopDistribution.map((r) =>
+                    r.hops === 0
+                      ? "rgba(52,211,153,0.7)"
+                      : r.hops === 1
+                      ? "rgba(251,146,60,0.7)"
+                      : "rgba(239,68,68,0.7)"
+                  ),
+                },
+              ],
+            }}
+            options={{
+              responsive: true,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { ticks: { color: "#71717a" }, grid: { color: "#27272a" } },
+                y: { ticks: { color: "#71717a" }, grid: { color: "#27272a" } },
+              },
+            }}
+          />
+          <p className="mt-3 text-xs text-zinc-600">
+            Green = served directly · Orange = 1 failover hop · Red = 2 hops (degraded path)
+          </p>
+        </div>
+      )}
 
       <div>
         <h2 className="mb-3 text-sm font-medium text-zinc-400">Recent failover events</h2>
