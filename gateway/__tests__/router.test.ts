@@ -39,7 +39,7 @@ function failCaller(): ProviderCaller {
 }
 
 const baseRequest: UnifiedRequest = {
-  tier: "balanced", // chain: openai(gpt-4o) → anthropic(claude-sonnet-4-6)
+  tier: "balanced", // chain: groq(openai/gpt-oss-120b) → anthropic(claude-haiku-4-5-20251001)
   messages: [{ role: "user", content: "Hello" }],
   max_tokens: 100,
   stream: false,
@@ -62,18 +62,18 @@ describe("normal routing", () => {
     const result = await route(baseRequest, {
       breaker,
       callers: {
-        openai: successCaller("openai", "gpt-4o"),
-        anthropic: successCaller("anthropic", "claude-sonnet-4-6"),
+        groq: successCaller("groq", "openai/gpt-oss-120b"),
+        anthropic: successCaller("anthropic", "claude-haiku-4-5-20251001"),
       },
     });
-    expect(result.served_by.provider).toBe("openai");
+    expect(result.served_by.provider).toBe("groq");
     expect(result.failover_occurred).toBe(false);
   });
 
   it("passes request_id through", async () => {
     const result = await route(
       baseRequest,
-      { breaker, callers: { openai: successCaller("openai", "gpt-4o") } },
+      { breaker, callers: { groq: successCaller("groq", "openai/gpt-oss-120b") } },
       "fixed-id"
     );
     expect(result.request_id).toBe("fixed-id");
@@ -87,8 +87,8 @@ describe("failover on provider error", () => {
     const result = await route(baseRequest, {
       breaker,
       callers: {
-        openai: failCaller(),
-        anthropic: successCaller("anthropic", "claude-sonnet-4-6"),
+        groq: failCaller(),
+        anthropic: successCaller("anthropic", "claude-haiku-4-5-20251001"),
       },
     });
     expect(result.served_by.provider).toBe("anthropic");
@@ -99,11 +99,11 @@ describe("failover on provider error", () => {
     await route(baseRequest, {
       breaker,
       callers: {
-        openai: failCaller(),
-        anthropic: successCaller("anthropic", "claude-sonnet-4-6"),
+        groq: failCaller(),
+        anthropic: successCaller("anthropic", "claude-haiku-4-5-20251001"),
       },
     });
-    const status = await breaker.getStatus("openai");
+    const status = await breaker.getStatus("groq");
     expect(status.failure_count).toBe(1);
   });
 
@@ -112,7 +112,7 @@ describe("failover on provider error", () => {
       route(baseRequest, {
         breaker,
         callers: {
-          openai: failCaller(),
+          groq: failCaller(),
           anthropic: failCaller(),
         },
       })
@@ -124,30 +124,30 @@ describe("failover on provider error", () => {
 
 describe("circuit breaker: open circuit skips provider", () => {
   it("skips open provider and routes to next without calling it", async () => {
-    let openaiCalled = false;
+    let groqCalled = false;
 
-    // open openai circuit
-    await breaker.recordFailure("openai");
-    await breaker.recordFailure("openai");
-    await breaker.recordFailure("openai");
+    // open groq circuit
+    await breaker.recordFailure("groq");
+    await breaker.recordFailure("groq");
+    await breaker.recordFailure("groq");
 
     const result = await route(baseRequest, {
       breaker,
       callers: {
-        openai: async () => { openaiCalled = true; return makeResponse("openai", "gpt-4o"); },
-        anthropic: successCaller("anthropic", "claude-sonnet-4-6"),
+        groq: async () => { groqCalled = true; return makeResponse("groq", "openai/gpt-oss-120b"); },
+        anthropic: successCaller("anthropic", "claude-haiku-4-5-20251001"),
       },
     });
 
-    expect(openaiCalled).toBe(false);
+    expect(groqCalled).toBe(false);
     expect(result.served_by.provider).toBe("anthropic");
     expect(result.failover_occurred).toBe(true);
   });
 
   it("throws RouterError when all circuits open", async () => {
-    await breaker.recordFailure("openai");
-    await breaker.recordFailure("openai");
-    await breaker.recordFailure("openai");
+    await breaker.recordFailure("groq");
+    await breaker.recordFailure("groq");
+    await breaker.recordFailure("groq");
     await breaker.recordFailure("anthropic");
     await breaker.recordFailure("anthropic");
     await breaker.recordFailure("anthropic");
@@ -161,19 +161,19 @@ describe("circuit breaker: open circuit skips provider", () => {
 describe("circuit breaker: half-open success closes circuit", () => {
   it("closes circuit after successful half-open request", async () => {
     // open the circuit
-    await breaker.recordFailure("openai");
-    await breaker.recordFailure("openai");
-    await breaker.recordFailure("openai");
+    await breaker.recordFailure("groq");
+    await breaker.recordFailure("groq");
+    await breaker.recordFailure("groq");
 
     // advance time past open duration to trigger half-open
     now += 30_001;
 
     await route(baseRequest, {
       breaker,
-      callers: { openai: successCaller("openai", "gpt-4o") },
+      callers: { groq: successCaller("groq", "openai/gpt-oss-120b") },
     });
 
-    const status = await breaker.getStatus("openai");
+    const status = await breaker.getStatus("groq");
     expect(status.state).toBe("closed");
     expect(status.failure_count).toBe(0);
   });

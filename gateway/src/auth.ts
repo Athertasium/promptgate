@@ -27,6 +27,8 @@ export async function authenticate(
   tier: string,
   redis: Redis
 ): Promise<AuthResult> {
+  if (!rawKey) return { ok: false, status: 401 };
+
   const hash = hashKey(rawKey);
   const apiKey = await getDb().apiKey.findUnique({ where: { key_hash: hash } });
 

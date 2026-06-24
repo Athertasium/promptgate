@@ -2,6 +2,7 @@ import { MODEL_TIERS } from "@promptgate/shared";
 import type { Provider, UnifiedRequest, UnifiedResponse } from "@promptgate/shared";
 import { randomUUID } from "crypto";
 import { CircuitBreaker } from "./circuit-breaker";
+import { RateLimitBackoff, RateLimitError } from "./rate-limit-backoff";
 import { callAnthropic } from "./providers/anthropic";
 import { callOpenAI } from "./providers/openai";
 import { callGroq } from "./providers/groq";
@@ -15,9 +16,12 @@ export type ProviderCaller = (
 
 export interface RouterDeps {
   breaker: CircuitBreaker;
+  backoff?: RateLimitBackoff;
   // Injected for testing; defaults to real SDK callers
   callers?: Partial<Record<Provider, ProviderCaller>>;
 }
+
+export { RateLimitError };
 
 export class RouterError extends Error {
   constructor(message: string) {
@@ -58,7 +62,12 @@ export async function route(
 
     const state = await deps.breaker.effectiveState(provider);
     if (state === "open") {
-      // circuit open — skip immediately, count as failover if more remain
+      if (i < chain.length - 1) failoverOccurred = true;
+      continue;
+    }
+
+    // 429 backoff check — separate from circuit breaker, does not count as 5xx
+    if (deps.backoff && (await deps.backoff.isBlocked(provider))) {
       if (i < chain.length - 1) failoverOccurred = true;
       continue;
     }
@@ -69,12 +78,20 @@ export async function route(
       if (state === "half-open") {
         await deps.breaker.recordSuccess(provider);
       }
+      if (deps.backoff) {
+        await deps.backoff.recordSuccess(provider);
+      }
 
       return { ...response, failover_occurred: failoverOccurred };
     } catch (err) {
       firstError ??= err;
 
-      if (isRetryable(err)) {
+      if (err instanceof RateLimitError) {
+        // 429 — track separately; never increments circuit-breaker failure_count
+        if (deps.backoff) {
+          await deps.backoff.recordRateLimit(provider, err.retryAfterMs);
+        }
+      } else if (isRetryable(err)) {
         await deps.breaker.recordFailure(provider);
       }
 

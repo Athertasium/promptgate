@@ -82,4 +82,10 @@ export class CircuitBreaker {
   async recordSuccess(provider: Provider): Promise<void> {
     await this.save(provider, { ...DEFAULT_STATUS });
   }
+
+  // Used by RateLimitBackoff to escalate 5 consecutive 429s into circuit-open.
+  async forceOpen(provider: Provider): Promise<void> {
+    const status = await this.getStatus(provider);
+    await this.save(provider, { ...status, state: "open", opened_at: this.now() });
+  }
 }
