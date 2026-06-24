@@ -3,6 +3,7 @@ import type {
   UnifiedRequest,
   UnifiedResponse,
   StopReason,
+  StreamEvent,
 } from "@promptgate/shared";
 import { randomUUID } from "crypto";
 
@@ -82,6 +83,61 @@ export class ForcedFailError extends Error {
     super("FORCE_FAIL: openai adapter forced failure");
     this.name = "ForcedFailError";
   }
+}
+
+export async function* streamOpenAI(
+  unified: UnifiedRequest,
+  model: string,
+  requestId: string = randomUUID()
+): AsyncGenerator<StreamEvent> {
+  if (process.env.FORCE_FAIL_PROVIDER === "openai") {
+    throw new ForcedFailError();
+  }
+
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const start = Date.now();
+
+  const stream = await client.chat.completions.create({
+    model,
+    max_tokens: unified.max_tokens,
+    ...(unified.temperature !== undefined && { temperature: unified.temperature }),
+    messages: unified.messages.map((m) => ({ role: m.role, content: m.content })),
+    stream: true,
+    stream_options: { include_usage: true },
+  });
+
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let stopReason: StopReason = "end_turn";
+  let finalModel = model;
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) yield { type: "delta", content: delta };
+
+    const finish = chunk.choices[0]?.finish_reason;
+    if (finish) stopReason = mapStopReason(finish);
+
+    if (chunk.usage) {
+      inputTokens = chunk.usage.prompt_tokens ?? 0;
+      outputTokens = chunk.usage.completion_tokens ?? 0;
+    }
+    if (chunk.model) finalModel = chunk.model;
+  }
+
+  yield {
+    type: "done",
+    stop_reason: stopReason,
+    usage: {
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cost_usd: computeCost(finalModel, inputTokens, outputTokens),
+    },
+    served_by: { provider: "openai", model: finalModel },
+    failover_occurred: false,
+    request_id: requestId,
+    latency_ms: Date.now() - start,
+  };
 }
 
 export async function callOpenAI(

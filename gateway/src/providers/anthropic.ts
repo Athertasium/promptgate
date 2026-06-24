@@ -3,6 +3,7 @@ import type {
   UnifiedRequest,
   UnifiedResponse,
   StopReason,
+  StreamEvent,
 } from "@promptgate/shared";
 import { randomUUID } from "crypto";
 
@@ -99,6 +100,68 @@ export class ForcedFailError extends Error {
     super("FORCE_FAIL: anthropic adapter forced failure");
     this.name = "ForcedFailError";
   }
+}
+
+export async function* streamAnthropic(
+  unified: UnifiedRequest,
+  model: string,
+  requestId: string = randomUUID()
+): AsyncGenerator<StreamEvent> {
+  if (process.env.FORCE_FAIL_PROVIDER === "anthropic") {
+    throw new ForcedFailError();
+  }
+
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const start = Date.now();
+
+  const systemMessage = unified.messages.find((m) => m.role === "system");
+  const nonSystemMessages = unified.messages.filter((m) => m.role !== "system");
+
+  const stream = await client.messages.create({
+    model,
+    max_tokens: unified.max_tokens,
+    ...(unified.temperature !== undefined && { temperature: unified.temperature }),
+    ...(systemMessage && { system: systemMessage.content }),
+    messages: nonSystemMessages.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+    stream: true,
+  });
+
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let stopReason: StopReason = "end_turn";
+  let finalModel = model;
+
+  for await (const event of stream) {
+    if (event.type === "message_start") {
+      inputTokens = event.message.usage.input_tokens;
+      finalModel = event.message.model;
+    } else if (
+      event.type === "content_block_delta" &&
+      event.delta.type === "text_delta"
+    ) {
+      yield { type: "delta", content: event.delta.text };
+    } else if (event.type === "message_delta") {
+      outputTokens = event.usage.output_tokens;
+      stopReason = mapStopReason(event.delta.stop_reason);
+    }
+  }
+
+  yield {
+    type: "done",
+    stop_reason: stopReason,
+    usage: {
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cost_usd: computeCost(finalModel, inputTokens, outputTokens),
+    },
+    served_by: { provider: "anthropic", model: finalModel },
+    failover_occurred: false,
+    request_id: requestId,
+    latency_ms: Date.now() - start,
+  };
 }
 
 export async function callAnthropic(

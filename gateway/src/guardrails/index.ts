@@ -1,6 +1,7 @@
 import type { Message } from "@promptgate/shared";
 import type { UnifiedRequest } from "@promptgate/shared";
 import { CHECKS } from "./registry.js";
+import type { GuardrailMatch } from "./types.js";
 
 export type { GuardrailCheck, GuardrailMatch, GuardrailAction } from "./types.js";
 
@@ -14,13 +15,13 @@ export interface GuardrailConfig {
 
 export interface GuardrailResult {
   passed: boolean;
-  matches: Array<{ check_type: string; action: string; pattern_type: string }>;
+  matches: GuardrailMatch[];
   messages: Message[];
 }
 
 export interface OutputPIIResult {
   content: string;
-  matches: Array<{ check_type: string; action: string; pattern_type: string }>;
+  matches: GuardrailMatch[];
 }
 
 export function checkGuardrails(req: UnifiedRequest, config: GuardrailConfig = {}): GuardrailResult {

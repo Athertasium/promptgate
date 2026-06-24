@@ -9,7 +9,8 @@ import type { ExactMatchCache } from "../cache.js";
 import type { SemanticCacheLog } from "../semantic-cache.js";
 import { authenticate } from "../auth.js";
 import { checkGuardrails, checkOutputPII } from "../guardrails/index.js";
-import { route } from "../router.js";
+import { route, routeStream } from "../router.js";
+import type { StreamDone } from "@promptgate/shared";
 import {
   logRequest,
   logFailoverEvent,
@@ -34,7 +35,7 @@ const bodySchema = z.object({
   messages: z.array(messageSchema).min(1),
   max_tokens: z.number().int().positive(),
   temperature: z.number().min(0).max(2).optional(),
-  stream: z.literal(false),
+  stream: z.boolean().default(false),
   metadata: z
     .object({
       caller_id: z.string().optional(),
@@ -88,7 +89,50 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
       return reply.send(cacheRes);
     }
 
-    // Route to provider
+    // Streaming path — no cache, no output PII redaction, no semantic cache observation
+    if (processedReq.stream) {
+      reply.raw.setHeader("Content-Type", "text/event-stream");
+      reply.raw.setHeader("Cache-Control", "no-cache");
+      reply.raw.setHeader("Connection", "keep-alive");
+      reply.raw.setHeader("X-Accel-Buffering", "no");
+      reply.hijack();
+
+      try {
+        let doneEvent: StreamDone | null = null;
+        const gen = routeStream(processedReq, { breaker: deps.breaker }, requestId);
+
+        for await (const event of gen) {
+          reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+          if (event.type === "done") doneEvent = event;
+        }
+
+        reply.raw.write("data: [DONE]\n\n");
+
+        if (doneEvent) {
+          const streamedResponse: import("@promptgate/shared").UnifiedResponse = {
+            content: "",
+            stop_reason: doneEvent.stop_reason,
+            usage: doneEvent.usage,
+            served_by: doneEvent.served_by,
+            failover_occurred: doneEvent.failover_occurred,
+            cache_hit: false,
+            latency_ms: doneEvent.latency_ms,
+            request_id: requestId,
+          };
+          await logRequest(processedReq, streamedResponse);
+          await logGuardrailEvents(requestId, guardrailResult.matches);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Stream failed";
+        reply.raw.write(`data: ${JSON.stringify({ type: "error", message: msg })}\n\n`);
+        reply.raw.write("data: [DONE]\n\n");
+      } finally {
+        reply.raw.end();
+      }
+      return;
+    }
+
+    // Non-streaming path — route to provider
     const start = Date.now();
     let response;
     try {

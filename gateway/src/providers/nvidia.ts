@@ -3,6 +3,7 @@ import type {
   UnifiedRequest,
   UnifiedResponse,
   StopReason,
+  StreamEvent,
 } from "@promptgate/shared";
 import { randomUUID } from "crypto";
 
@@ -108,6 +109,69 @@ function makeClient(): OpenAI {
     apiKey: process.env.NVIDIA_API_KEY,
     baseURL: "https://integrate.api.nvidia.com/v1",
   });
+}
+
+export async function* streamNvidia(
+  unified: UnifiedRequest,
+  model: string,
+  requestId: string = randomUUID()
+): AsyncGenerator<StreamEvent> {
+  if (process.env.FORCE_FAIL_PROVIDER === "nvidia") {
+    throw new ForcedFailError();
+  }
+
+  const client = makeClient();
+  const start = Date.now();
+  const isThinking = THINKING_MODELS.has(model);
+
+  const streamParams: OpenAI.ChatCompletionCreateParamsStreaming = {
+    model,
+    max_tokens: unified.max_tokens,
+    ...(unified.temperature !== undefined && { temperature: unified.temperature }),
+    messages: unified.messages.map((m) => ({ role: m.role, content: m.content })),
+    stream: true,
+    stream_options: { include_usage: true },
+    // ponytail: thinking params passed through; NVIDIA ignores unknowns for non-thinking models
+    ...(isThinking && {
+      reasoning_budget: unified.max_tokens,
+      chat_template_kwargs: { enable_thinking: true },
+    }),
+  } as OpenAI.ChatCompletionCreateParamsStreaming;
+
+  const stream = await client.chat.completions.create(streamParams);
+
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let stopReason: StopReason = "end_turn";
+  let finalModel = model;
+
+  for await (const chunk of stream) {
+    const delta = (chunk.choices[0]?.delta as { content?: string; reasoning_content?: string });
+    if (delta?.content) yield { type: "delta", content: delta.content };
+
+    const finish = chunk.choices[0]?.finish_reason;
+    if (finish) stopReason = mapStopReason(finish);
+
+    if (chunk.usage) {
+      inputTokens = chunk.usage.prompt_tokens ?? 0;
+      outputTokens = chunk.usage.completion_tokens ?? 0;
+    }
+    if (chunk.model) finalModel = chunk.model;
+  }
+
+  yield {
+    type: "done",
+    stop_reason: stopReason,
+    usage: {
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cost_usd: computeCost(finalModel, inputTokens, outputTokens),
+    },
+    served_by: { provider: "nvidia", model: finalModel },
+    failover_occurred: false,
+    request_id: requestId,
+    latency_ms: Date.now() - start,
+  };
 }
 
 export async function callNvidia(

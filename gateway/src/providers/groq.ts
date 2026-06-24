@@ -3,6 +3,7 @@ import type {
   UnifiedRequest,
   UnifiedResponse,
   StopReason,
+  StreamEvent,
 } from "@promptgate/shared";
 import { randomUUID } from "crypto";
 
@@ -84,6 +85,60 @@ export class ForcedFailError extends Error {
     super("FORCE_FAIL: groq adapter forced failure");
     this.name = "ForcedFailError";
   }
+}
+
+export async function* streamGroq(
+  unified: UnifiedRequest,
+  model: string,
+  requestId: string = randomUUID()
+): AsyncGenerator<StreamEvent> {
+  if (process.env.FORCE_FAIL_PROVIDER === "groq") {
+    throw new ForcedFailError();
+  }
+
+  const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  const start = Date.now();
+
+  const stream = await client.chat.completions.create({
+    model,
+    max_tokens: unified.max_tokens,
+    ...(unified.temperature !== undefined && { temperature: unified.temperature }),
+    messages: unified.messages.map((m) => ({ role: m.role, content: m.content })),
+    stream: true,
+  });
+
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let stopReason: StopReason = "end_turn";
+  let finalModel = model;
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) yield { type: "delta", content: delta };
+
+    const finish = chunk.choices[0]?.finish_reason;
+    if (finish) stopReason = mapStopReason(finish);
+
+    if (chunk.x_groq?.usage) {
+      inputTokens = chunk.x_groq.usage.prompt_tokens ?? 0;
+      outputTokens = chunk.x_groq.usage.completion_tokens ?? 0;
+    }
+    if (chunk.model) finalModel = chunk.model;
+  }
+
+  yield {
+    type: "done",
+    stop_reason: stopReason,
+    usage: {
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cost_usd: computeCost(finalModel, inputTokens, outputTokens),
+    },
+    served_by: { provider: "groq", model: finalModel },
+    failover_occurred: false,
+    request_id: requestId,
+    latency_ms: Date.now() - start,
+  };
 }
 
 export async function callGroq(

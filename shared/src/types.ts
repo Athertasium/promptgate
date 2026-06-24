@@ -26,12 +26,34 @@ export interface UnifiedRequest {
   max_tokens: number;
   temperature?: number;
   tools?: UnifiedTool[];
-  stream: false;
+  stream: boolean;
   metadata?: {
     caller_id?: string;
     tags?: string[];
   };
 }
+
+export interface StreamDelta {
+  type: "delta";
+  content: string;
+}
+
+export interface StreamDone {
+  type: "done";
+  stop_reason: StopReason;
+  usage: TokenUsage;
+  served_by: ServedBy;
+  failover_occurred: boolean;
+  request_id: string;
+  latency_ms: number;
+}
+
+export interface StreamError {
+  type: "error";
+  message: string;
+}
+
+export type StreamEvent = StreamDelta | StreamDone | StreamError;
 
 export interface TokenUsage {
   input_tokens: number;
