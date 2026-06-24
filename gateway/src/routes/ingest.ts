@@ -1,11 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { randomUUID } from "crypto";
+import type { Redis } from "ioredis";
 import { MODEL_TIERS } from "@promptgate/shared";
 import type { UnifiedRequest } from "@promptgate/shared";
 import type { CircuitBreaker } from "../circuit-breaker.js";
 import type { ExactMatchCache } from "../cache.js";
 import type { SemanticCacheLog } from "../semantic-cache.js";
+import { authenticate } from "../auth.js";
 import { checkGuardrails, checkOutputPII } from "../guardrails.js";
 import { route } from "../router.js";
 import {
@@ -18,6 +20,7 @@ import {
 export interface IngestDeps {
   breaker: CircuitBreaker;
   cache: ExactMatchCache;
+  redis: Redis;
   semanticCacheLog?: SemanticCacheLog;
 }
 
@@ -50,6 +53,16 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
     const req = parsed.data as UnifiedRequest;
     const requestId = randomUUID();
 
+    // Auth — before guardrails; unauthenticated/rate-limited requests don't reach providers
+    const rawKey = (request.headers["x-api-key"] as string | undefined) ?? "";
+    const auth = await authenticate(rawKey, req.tier, deps.redis);
+    if (!auth.ok) {
+      app.log.warn({ status: auth.status }, "auth failed");
+      return reply.status(auth.status).send({
+        error: auth.status === 429 ? "Rate limit exceeded" : "Unauthorized",
+      });
+    }
+
     // Guardrails
     const guardrailResult = checkGuardrails(req);
     if (!guardrailResult.passed) {
@@ -58,7 +71,12 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
       return reply.status(400).send({ error: "Request blocked by guardrails" });
     }
 
-    const processedReq: UnifiedRequest = { ...req, messages: guardrailResult.messages };
+    // caller_id from verified key overrides any client-supplied value (closes v1 spoofability gap)
+    const processedReq: UnifiedRequest = {
+      ...req,
+      messages: guardrailResult.messages,
+      metadata: { ...req.metadata, caller_id: auth.callerId },
+    };
 
     // Exact-match cache check
     const cached = await deps.cache.get(processedReq);

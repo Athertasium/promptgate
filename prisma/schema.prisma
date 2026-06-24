@@ -73,3 +73,15 @@ model SemanticCacheLog {
 
   @@map("semantic_cache_log")
 }
+
+model ApiKey {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key_hash        String    @unique
+  caller_id       String
+  created_at      DateTime  @default(now()) @db.Timestamptz
+  revoked_at      DateTime? @db.Timestamptz
+  rate_limit_rpm  Int       @default(60)
+  allowed_tiers   String[]  @default(["fast", "balanced", "smart", "thinking"])
+
+  @@map("api_keys")
+}
