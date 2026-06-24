@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkGuardrails } from "../src/guardrails";
+import { checkGuardrails, checkOutputPII } from "../src/guardrails";
 import type { UnifiedRequest } from "@promptgate/shared";
 
 function req(content: string): UnifiedRequest {
@@ -141,6 +141,35 @@ describe("Prompt injection detection", () => {
     const inj = result.matches.filter((m) => m.check_type === "prompt_injection");
     expect(inj.every((m) => m.action === "flagged")).toBe(true);
     expect(result.passed).toBe(true);
+  });
+});
+
+describe("checkOutputPII", () => {
+  it("redacts email in provider response", () => {
+    const result = checkOutputPII("Your contact is admin@corp.com for support.");
+    expect(result.content).toContain("[REDACTED:email]");
+    expect(result.content).not.toContain("admin@corp.com");
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0]).toMatchObject({ check_type: "pii_output", action: "redacted", pattern_type: "email" });
+  });
+
+  it("redacts valid CC, keeps Luhn-failing number", () => {
+    const result = checkOutputPII("card 4111111111111111 or fake 1234567890123456");
+    expect(result.content).toContain("[REDACTED:credit_card]");
+    expect(result.content).toContain("1234567890123456");
+  });
+
+  it("no matches on clean content", () => {
+    const result = checkOutputPII("Here is a summary of the quarterly report.");
+    expect(result.content).toBe("Here is a summary of the quarterly report.");
+    expect(result.matches).toHaveLength(0);
+  });
+
+  it("redacts multiple PII types in one response", () => {
+    const result = checkOutputPII("call 555-867-5309 or email me@test.com");
+    const types = result.matches.map((m) => m.pattern_type);
+    expect(types).toContain("phone_us");
+    expect(types).toContain("email");
   });
 });
 

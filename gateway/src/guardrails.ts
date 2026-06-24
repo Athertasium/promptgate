@@ -2,8 +2,8 @@ import type { Message, UnifiedRequest } from "@promptgate/shared";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-export type GuardrailAction = "flagged" | "blocked";
-export type CheckType = "pii" | "prompt_injection";
+export type GuardrailAction = "flagged" | "blocked" | "redacted";
+export type CheckType = "pii" | "prompt_injection" | "pii_output";
 
 export interface GuardrailMatch {
   check_type: CheckType;
@@ -117,6 +117,23 @@ const INJECTION_PATTERNS: Array<{ id: string; pattern: RegExp }> = [
     pattern: /\bjailbreak\b|\bdo\s+anything\s+now\b|\bDAN\b/,
   },
 ];
+
+// ── Output PII check ──────────────────────────────────────────────────────────
+
+export interface OutputPIIResult {
+  content: string;        // redacted content (unchanged if no PII found)
+  matches: GuardrailMatch[];
+}
+
+export function checkOutputPII(content: string): OutputPIIResult {
+  const { redacted, types } = redactMessage(content);
+  const matches: GuardrailMatch[] = types.map((t) => ({
+    check_type: "pii_output",
+    action: "redacted",
+    pattern_type: t,
+  }));
+  return { content: redacted, matches };
+}
 
 // ── Main check ────────────────────────────────────────────────────────────────
 

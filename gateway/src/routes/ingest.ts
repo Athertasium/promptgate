@@ -6,7 +6,7 @@ import type { UnifiedRequest } from "@promptgate/shared";
 import type { CircuitBreaker } from "../circuit-breaker.js";
 import type { ExactMatchCache } from "../cache.js";
 import type { SemanticCacheLog } from "../semantic-cache.js";
-import { checkGuardrails } from "../guardrails.js";
+import { checkGuardrails, checkOutputPII } from "../guardrails.js";
 import { route } from "../router.js";
 import {
   logRequest,
@@ -53,8 +53,8 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
     // Guardrails
     const guardrailResult = checkGuardrails(req);
     if (!guardrailResult.passed) {
-      // Log before returning — fire-and-forget; don't block the 400
-      logGuardrailEvents(requestId, guardrailResult.matches).catch(() => {});
+      // Blocked requests have no request row — log to server log only, not DB
+      app.log.warn({ matches: guardrailResult.matches }, "request blocked by guardrails");
       return reply.status(400).send({ error: "Request blocked by guardrails" });
     }
 
@@ -64,10 +64,9 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
     const cached = await deps.cache.get(processedReq);
     if (cached) {
       const cacheRes = { ...cached, request_id: requestId };
-      await Promise.all([
-        logRequest(processedReq, cacheRes),
-        logGuardrailEvents(requestId, guardrailResult.matches),
-      ]);
+      // logRequest must complete before logGuardrailEvents (FK dependency)
+      await logRequest(processedReq, cacheRes);
+      await logGuardrailEvents(requestId, guardrailResult.matches);
       return reply.send(cacheRes);
     }
 
@@ -81,13 +80,21 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
       return reply.status(502).send({ error: msg });
     }
 
+    // Output-path PII redaction (v2 §5)
+    const outputGuardrail = checkOutputPII(response.content);
+    if (outputGuardrail.matches.length > 0) {
+      response = { ...response, content: outputGuardrail.content };
+    }
+
     // Cache write (non-blocking)
     deps.cache.set(processedReq, response).catch(() => {});
 
-    // Log everything
-    const logTasks: Promise<unknown>[] = [
-      logRequest(processedReq, response),
-      logGuardrailEvents(requestId, guardrailResult.matches),
+    // Log: request row must exist before any child rows (FK dependency)
+    await logRequest(processedReq, response);
+
+    const allGuardrailMatches = [...guardrailResult.matches, ...outputGuardrail.matches];
+    const childLogTasks: Promise<unknown>[] = [
+      logGuardrailEvents(requestId, allGuardrailMatches),
     ];
 
     if (response.failover_occurred) {
@@ -96,13 +103,13 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
       const fromProvider = chain[0].provider;
       const toProvider = response.served_by.provider;
       if (fromProvider !== toProvider) {
-        logTasks.push(logFailoverEvent(requestId, fromProvider, toProvider, "error"));
+        childLogTasks.push(logFailoverEvent(requestId, fromProvider, toProvider, "error"));
       }
     }
 
     if (deps.semanticCacheLog) {
       const cacheKey = `${processedReq.tier}:${requestId}`;
-      logTasks.push(
+      childLogTasks.push(
         deps.semanticCacheLog
           .observe(processedReq, cacheKey)
           .then((obs) => logSemanticCacheObservation(requestId, obs))
@@ -110,7 +117,7 @@ export async function ingestRoute(app: FastifyInstance, deps: IngestDeps): Promi
       );
     }
 
-    await Promise.all(logTasks);
+    await Promise.all(childLogTasks);
 
     return reply.send(response);
   });
