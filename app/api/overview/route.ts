@@ -4,10 +4,10 @@ import { getDb } from "../../../lib/db";
 export async function GET() {
   const db = getDb();
 
-  const [totals, byHourProvider, latencyRows, cacheStats] = await Promise.all([
+  const [totals, byHourProvider, latencyRows, cacheStats, tokenRows] = await Promise.all([
     db.request.aggregate({
       _count: { id: true },
-      _sum: { cost_usd: true },
+      _sum: { cost_usd: true, input_tokens: true, output_tokens: true },
     }),
     db.$queryRaw<{ hour: Date; provider: string; cost: number; count: number }[]>`
       SELECT
@@ -35,16 +35,28 @@ export async function GET() {
       _count: { id: true },
       where: { cache_hit: true },
     }),
+    db.$queryRaw<{ hour: Date; input_tokens: number; output_tokens: number }[]>`
+      SELECT
+        date_trunc('hour', created_at) AS hour,
+        COALESCE(SUM(input_tokens)::int, 0) AS input_tokens,
+        COALESCE(SUM(output_tokens)::int, 0) AS output_tokens
+      FROM requests
+      WHERE created_at > now() - interval '24 hours'
+      GROUP BY 1
+      ORDER BY 1
+    `,
   ]);
 
   const totalRequests = totals._count.id;
   const totalCost = Number(totals._sum.cost_usd ?? 0);
+  const totalTokens = Number(totals._sum.input_tokens ?? 0) + Number(totals._sum.output_tokens ?? 0);
   const cacheHitRate =
     totalRequests > 0 ? cacheStats._count.id / totalRequests : 0;
 
   return NextResponse.json({
     totalRequests,
     totalCost,
+    totalTokens,
     cacheHitRate,
     costByHourProvider: byHourProvider.map((r) => ({
       hour: r.hour,
@@ -56,6 +68,11 @@ export async function GET() {
       hour: r.hour,
       p50: Number(r.p50 ?? 0),
       p95: Number(r.p95 ?? 0),
+    })),
+    tokensByHour: tokenRows.map((r) => ({
+      hour: r.hour,
+      input: Number(r.input_tokens),
+      output: Number(r.output_tokens),
     })),
   });
 }

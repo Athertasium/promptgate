@@ -2,7 +2,7 @@ interface StatCardProps {
   label: string;
   value: string;
   sub?: string;
-  accent?: "green" | "red" | "indigo" | "default";
+  accent?: "green" | "red" | "indigo" | "violet" | "default";
 }
 
 export function StatCard({ label, value, sub, accent = "default" }: StatCardProps) {
@@ -10,6 +10,7 @@ export function StatCard({ label, value, sub, accent = "default" }: StatCardProp
     green: "text-emerald-400",
     red: "text-rose-400",
     indigo: "text-indigo-400",
+    violet: "text-violet-400",
     default: "text-zinc-100",
   }[accent];
 

@@ -20,9 +20,11 @@ ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Filler, 
 type OverviewData = {
   totalRequests: number;
   totalCost: number;
+  totalTokens: number;
   cacheHitRate: number;
   costByHourProvider: { hour: string; provider: string; cost: number }[];
   latencyByHour: { hour: string; p50: number; p95: number }[];
+  tokensByHour: { hour: string; input: number; output: number }[];
 };
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -49,6 +51,30 @@ function buildCostChart(data: OverviewData["costByHourProvider"]) {
     };
   });
   return { labels: hours.map((h) => new Date(h).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })), datasets };
+}
+
+function buildTokenChart(data: OverviewData["tokensByHour"]) {
+  return {
+    labels: data.map((r) => new Date(r.hour).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })),
+    datasets: [
+      {
+        label: "input",
+        data: data.map((r) => r.input),
+        borderColor: "rgba(99,102,241,0.8)",
+        backgroundColor: "rgba(99,102,241,0.15)",
+        fill: true,
+        tension: 0.3,
+      },
+      {
+        label: "output",
+        data: data.map((r) => r.output),
+        borderColor: "rgba(52,211,153,0.8)",
+        backgroundColor: "rgba(52,211,153,0.15)",
+        fill: true,
+        tension: 0.3,
+      },
+    ],
+  };
 }
 
 function buildLatencyChart(data: OverviewData["latencyByHour"]) {
@@ -101,12 +127,17 @@ export default function OverviewPage() {
     <div className="space-y-8">
       <h1 className="text-xl font-semibold">Overview</h1>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <StatCard label="Total requests" value={data.totalRequests.toLocaleString()} />
         <StatCard
           label="Total cost"
           value={`$${data.totalCost.toFixed(4)}`}
           accent="indigo"
+        />
+        <StatCard
+          label="Total tokens"
+          value={data.totalTokens.toLocaleString()}
+          accent="violet"
         />
         <StatCard
           label="Cache hit rate"
@@ -131,6 +162,14 @@ export default function OverviewPage() {
             <Empty />
           ) : (
             <Line data={buildLatencyChart(data.latencyByHour)} options={chartOpts} />
+          )}
+        </div>
+        <div className="col-span-2 rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <p className="mb-4 text-sm font-medium text-zinc-400">Tokens / hour — input vs output (24 h)</p>
+          {data.tokensByHour.length === 0 ? (
+            <Empty />
+          ) : (
+            <Line data={buildTokenChart(data.tokensByHour)} options={chartOpts} />
           )}
         </div>
       </div>
