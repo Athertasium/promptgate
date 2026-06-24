@@ -1,5 +1,5 @@
-import { MODEL_TIERS, TIER_ROUTING_STRATEGY } from "@promptgate/shared";
 import type { Provider, TierEntry, UnifiedRequest, UnifiedResponse, StreamEvent } from "@promptgate/shared";
+import { getTierConfig } from "./tier-config";
 import { randomUUID } from "crypto";
 import { CircuitBreaker } from "./circuit-breaker";
 import { RateLimitBackoff, RateLimitError } from "./rate-limit-backoff";
@@ -73,12 +73,11 @@ function isRetryable(err: unknown): boolean {
 // NEVER reorders a circuit-open provider ahead of a closed one — health beats cost.
 async function orderedCandidates(
   chain: readonly TierEntry[],
-  tier: UnifiedRequest["tier"],
+  strategy: "priority" | "cost_optimized",
   breaker: CircuitBreaker,
   backoff: RateLimitBackoff | undefined,
   estimatedMaxTokens: number
 ): Promise<TierEntry[]> {
-  const strategy = TIER_ROUTING_STRATEGY[tier];
   const capped = chain.slice(0, MAX_FAILOVER_HOPS + 1);
 
   if (strategy === "priority") return [...capped];
@@ -117,12 +116,12 @@ export async function route(
   deps: RouterDeps,
   requestId: string = randomUUID()
 ): Promise<UnifiedResponse> {
-  const rawChain = MODEL_TIERS[unified.tier];
+  const tierCfg = await getTierConfig(unified.tier);
   const callers = { ...DEFAULT_CALLERS, ...deps.callers };
 
   const chain = await orderedCandidates(
-    rawChain,
-    unified.tier,
+    tierCfg.chain,
+    tierCfg.strategy,
     deps.breaker,
     deps.backoff,
     unified.max_tokens
@@ -211,12 +210,12 @@ export async function* routeStream(
   deps: RouterDeps,
   requestId: string = randomUUID()
 ): AsyncGenerator<StreamEvent> {
-  const rawChain = MODEL_TIERS[unified.tier];
+  const tierCfg = await getTierConfig(unified.tier);
   const streamCallers: Record<Provider, StreamCaller> = { ...DEFAULT_STREAM_CALLERS };
 
   const chain = await orderedCandidates(
-    rawChain,
-    unified.tier,
+    tierCfg.chain,
+    tierCfg.strategy,
     deps.breaker,
     deps.backoff,
     unified.max_tokens

@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/dashboard/requests", label: "Requests" },
   { href: "/dashboard/guardrails", label: "Guardrails" },
   { href: "/dashboard/cache", label: "Cache" },
+  { href: "/dashboard/tiers", label: "Model Tiers" },
 ];
 
 export function Nav() {

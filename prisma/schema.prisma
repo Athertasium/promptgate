@@ -86,3 +86,18 @@ model ApiKey {
 
   @@map("api_keys")
 }
+
+model ModelTierEntry {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tier                String
+  provider            String
+  model               String
+  priority            Int
+  enabled             Boolean  @default(true)
+  cost_per_1m_input   Float
+  cost_per_1m_output  Float
+  routing_strategy    String   @default("priority")
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  @@map("model_tier_entries")
+}
