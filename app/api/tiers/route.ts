@@ -5,6 +5,17 @@ export async function GET() {
   const db = getDb();
   const rows = await db.modelTierEntry.findMany({
     orderBy: [{ tier: "asc" }, { priority: "asc" }],
+    select: {
+      id: true,
+      tier: true,
+      provider: true,
+      model: true,
+      priority: true,
+      enabled: true,
+      cost_per_1m_input: true,
+      cost_per_1m_output: true,
+      routing_strategy: true,
+    },
   });
   return NextResponse.json(rows);
 }

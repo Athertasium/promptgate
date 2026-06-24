@@ -20,6 +20,15 @@ export async function GET() {
     db.failoverEvent.findMany({
       orderBy: { created_at: "desc" },
       take: 50,
+      select: {
+        id: true,
+        created_at: true,
+        from_provider: true,
+        to_provider: true,
+        reason: true,
+        hop_number: true,
+        added_latency_ms: true,
+      },
     }),
     db.$queryRaw<{ hops: number; count: number }[]>`
       SELECT
