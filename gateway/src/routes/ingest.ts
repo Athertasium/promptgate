@@ -8,7 +8,7 @@ import type { CircuitBreaker } from "../circuit-breaker.js";
 import type { ExactMatchCache } from "../cache.js";
 import type { SemanticCacheLog } from "../semantic-cache.js";
 import { authenticate } from "../auth.js";
-import { checkGuardrails, checkOutputPII } from "../guardrails.js";
+import { checkGuardrails, checkOutputPII } from "../guardrails/index.js";
 import { route } from "../router.js";
 import {
   logRequest,

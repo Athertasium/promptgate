@@ -1,5 +1,5 @@
 import type { UnifiedRequest, UnifiedResponse } from "@promptgate/shared";
-import type { GuardrailMatch } from "./guardrails.js";
+import type { GuardrailMatch } from "./guardrails/index.js";
 import type { SemanticObservation } from "./semantic-cache.js";
 import { getDb } from "./db.js";
 
