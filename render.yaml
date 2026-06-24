@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: promptgate-gateway
+    runtime: node
+    rootDir: .
+    buildCommand: bun install && cd gateway && bun run build
+    startCommand: cd gateway && bun run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: PASSPHRASE
+        sync: false
